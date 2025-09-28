@@ -136,7 +136,19 @@ jobs:
           }
 
           Write-Host "Using Apache ZIP URL: $url"
-          Invoke-WebRequest -Uri $url -OutFile apache.zip
+
+          $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+          $headers = @{
+            'User-Agent' = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36'
+            'Accept' = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+            'Accept-Language' = 'en-US,en;q=0.9'
+            'Referer' = 'https://www.apachelounge.com/download/VS17/'
+          }
+
+          # Prime the session so Apache Lounge issues a real download instead of hotlink redirect.
+          Invoke-WebRequest -Uri 'https://www.apachelounge.com/download/VS17/' -WebSession $session -Headers $headers -MaximumRedirection 5 -AllowInsecureRedirect | Out-Null
+
+          Invoke-WebRequest -Uri $url -OutFile apache.zip -WebSession $session -Headers $headers -MaximumRedirection 5 -AllowInsecureRedirect
           Expand-Archive -LiteralPath apache.zip -DestinationPath $env:RUNNER_TEMP\apache | Out-Null
           $root = Get-ChildItem $env:RUNNER_TEMP\apache | Where-Object { $_.PSIsContainer } | Select-Object -First 1
           if (-not $root) { throw "Could not find extracted Apache root." }
