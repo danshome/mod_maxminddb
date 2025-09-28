@@ -274,6 +274,48 @@ jobs:
       - name: Build module
         run: cmake --build build --config ${{ env.BUILD_TYPE }} --verbose
 
+      - name: Validate module (dumpbin)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $mod = Join-Path "build" "${{ env.BUILD_TYPE }}" "mod_maxminddb.so"
+          if (-not (Test-Path $mod)) { throw "Module not found: $mod" }
+
+          # Locate dumpbin
+          $dumpbin = (Get-Command dumpbin.exe -ErrorAction SilentlyContinue).Source
+          if (-not $dumpbin) {
+            $vswhere = "$Env:ProgramFiles(x86)\Microsoft Visual Studio\Installer\vswhere.exe"
+            if (Test-Path $vswhere) {
+              $vsinst = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+              if ($vsinst) {
+                $mroot = Join-Path $vsinst 'VC\Tools\MSVC'
+                $tool = Get-ChildItem $mroot -Directory | Sort-Object Name -Descending | Select-Object -First 1
+                if ($tool) {
+                  $candidate = Join-Path $tool.FullName 'bin\Hostx64\x64\dumpbin.exe'
+                  if (Test-Path $candidate) { $dumpbin = $candidate }
+                }
+              }
+            }
+          }
+          if (-not $dumpbin) { throw "dumpbin.exe not found" }
+
+          $headers = & $dumpbin /HEADERS $mod | Out-String
+          if ($headers -notmatch '(?i)machine.*x64') {
+            throw "Expected x64 machine in headers; got:`n$headers"
+          }
+
+          $deps = & $dumpbin /DEPENDENTS $mod | Out-String
+          $required = @('maxminddb.dll','libapr-1.dll','libaprutil-1.dll','WS2_32.dll')
+          foreach ($r in $required) {
+            if ($deps -notmatch [Regex]::Escape($r)) {
+              throw "Missing dependent: $r`n$deps"
+            }
+          }
+          if (-not ($deps -match 'libhttpd\.dll' -or $deps -match 'httpd\.dll')) {
+            throw "Missing Apache runtime (libhttpd.dll/httpd.dll)`n$deps"
+          }
+          Write-Host "dumpbin checks passed"
+
       - name: Collect module artifacts
         shell: pwsh
         run: |
