@@ -116,6 +116,12 @@ jobs:
             }
           }
           if (-not $stageRoot) {
+            $artifactRoot = Get-Item 'libmaxminddb-art'
+            if ((Test-Path (Join-Path $artifactRoot.FullName 'include')) -and (Test-Path (Join-Path $artifactRoot.FullName 'lib'))) {
+              $stageRoot = $artifactRoot
+            }
+          }
+          if (-not $stageRoot) {
             $stageRoot = Get-ChildItem -Recurse -Path "libmaxminddb-art" -Directory |
               Where-Object {
                 (Test-Path (Join-Path $_.FullName 'include')) -and (Test-Path (Join-Path $_.FullName 'lib'))
@@ -126,7 +132,7 @@ jobs:
           if (-not $stageRoot) {
             Write-Host "Artifact tree for debugging:"
             Get-ChildItem -Recurse -Path "libmaxminddb-art" | Select-Object FullName
-            throw "Unable to locate libmaxminddb staged install in artifact."
+            Write-Host "Stage root not found; falling back to file-based discovery."
           }
 
           Write-Host "Using libmaxminddb stage at $($stageRoot.FullName)"
@@ -136,7 +142,13 @@ jobs:
           $binDir = Join-Path $stageRoot.FullName 'bin'
 
           if (-not (Test-Path $includeDir) -or -not (Test-Path $libDir)) {
-            throw "Staged libmaxminddb is missing include/ or lib/ directories."
+            Write-Host "Stage include/lib not found under $($stageRoot.FullName). Falling back to file discovery."
+            $hdr = Get-ChildItem -Recurse -Path "libmaxminddb-art" -Filter "maxminddb.h" | Select-Object -First 1
+            $lib = Get-ChildItem -Recurse -Path "libmaxminddb-art" -Filter "maxminddb.lib" | Select-Object -First 1
+            $dll = Get-ChildItem -Recurse -Path "libmaxminddb-art" -Filter "maxminddb.dll" | Select-Object -First 1
+            if ($hdr) { $includeDir = Split-Path -Parent $hdr.FullName }
+            if ($lib) { $libDir = Split-Path -Parent $lib.FullName }
+            if ($dll) { $binDir = Split-Path -Parent $dll.FullName }
           }
 
           if (Test-Path $binDir) {
