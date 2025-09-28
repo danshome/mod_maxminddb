@@ -105,11 +105,24 @@ jobs:
           New-Item -Force -ItemType Directory -Path "deps\libmaxminddb\include" | Out-Null
           New-Item -Force -ItemType Directory -Path "deps\libmaxminddb\lib" | Out-Null
 
-          $stageRoot = Get-ChildItem -Recurse -Path "libmaxminddb-art" -Directory |
-            Where-Object {
-              (Test-Path (Join-Path $_.FullName 'include')) -and (Test-Path (Join-Path $_.FullName 'lib'))
-            } |
-            Select-Object -First 1
+          $candidateRoots = @(
+            Join-Path 'libmaxminddb-art' 'libmaxminddb/stage'),
+            Join-Path 'libmaxminddb-art' 'stage'
+          )
+          $stageRoot = $null
+          foreach ($path in $candidateRoots) {
+            if (Test-Path $path) {
+              $stageRoot = Get-Item $path
+              break
+            }
+          }
+          if (-not $stageRoot) {
+            $stageRoot = Get-ChildItem -Recurse -Path "libmaxminddb-art" -Directory |
+              Where-Object {
+                (Test-Path (Join-Path $_.FullName 'include')) -and (Test-Path (Join-Path $_.FullName 'lib'))
+              } |
+              Select-Object -First 1
+          }
 
           if (-not $stageRoot) {
             Write-Host "Artifact tree for debugging:"
