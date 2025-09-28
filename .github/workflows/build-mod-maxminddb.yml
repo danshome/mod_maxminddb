@@ -70,8 +70,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: libmaxminddb-msvc-${{ env.BUILD_TYPE }}-${{ env.ARCH }}
-          path: |
-            libmaxminddb/stage/**
+          path: libmaxminddb/stage
 
   build-module:
     name: Build mod_maxminddb (VC17 x64)
@@ -129,6 +128,8 @@ jobs:
             Get-ChildItem -Recurse -Path "libmaxminddb-art" | Select-Object FullName
             throw "Unable to locate libmaxminddb staged install in artifact."
           }
+
+          Write-Host "Using libmaxminddb stage at $($stageRoot.FullName)"
 
           $includeDir = Join-Path $stageRoot.FullName 'include'
           $libDir = Join-Path $stageRoot.FullName 'lib'
