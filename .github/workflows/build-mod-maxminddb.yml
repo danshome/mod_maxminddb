@@ -107,8 +107,7 @@ jobs:
 
           $stageRoot = Get-ChildItem -Recurse -Path "libmaxminddb-art" -Directory |
             Where-Object {
-              Test-Path (Join-Path $_.FullName 'include') -and
-              Test-Path (Join-Path $_.FullName 'lib')
+              (Test-Path (Join-Path $_.FullName 'include')) -and (Test-Path (Join-Path $_.FullName 'lib'))
             } |
             Select-Object -First 1
 
