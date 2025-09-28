@@ -1,0 +1,206 @@
+name: build-mod-maxminddb (Windows MSVC x64)
+
+on:
+  workflow_dispatch:
+    inputs:
+      apache_zip_url:
+        description: "Apache Lounge VC17 x64 ZIP URL (e.g. httpd-2.4.x-win64-VS17.zip)"
+        required: true
+        type: string
+      libmaxminddb_tag:
+        description: "libmaxminddb tag or ref (default 1.12.2)"
+        required: false
+        default: "1.12.2"
+        type: string
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'   # e.g., v1.12.2-mod
+
+jobs:
+  build-lib:
+    name: Build libmaxminddb (VC17 x64)
+    runs-on: windows-latest
+    env:
+      BUILD_TYPE: Release
+      CMAKE_GEN: Visual Studio 17 2022
+      ARCH: x64
+    steps:
+      - name: Checkout (this repo)
+        uses: actions/checkout@v4
+
+      - name: Fetch libmaxminddb
+        run: |
+          git clone https://github.com/maxmind/libmaxminddb.git
+          cd libmaxminddb
+          git checkout "${{ github.event.inputs.libmaxminddb_tag || '1.12.2' }}"
+
+      - name: Configure libmaxminddb (DLL)
+        run: >
+          cmake -S libmaxminddb -B libmaxminddb\build
+          -G "${{ env.CMAKE_GEN }}" -A ${{ env.ARCH }}
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
+          -DBUILD_SHARED_LIBS=ON
+          -DBUILD_TESTING=OFF
+          -DMMDB_BUILD_TESTS=OFF
+          -DMAXMINDDB_BUILD_BINARIES=OFF
+          -DMAXMINDDB_INSTALL=OFF
+
+      - name: Build libmaxminddb
+        run: cmake --build libmaxminddb\build --config ${{ env.BUILD_TYPE }} --verbose
+
+      - name: Upload lib artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: libmaxminddb-msvc-${{ env.BUILD_TYPE }}-${{ env.ARCH }}
+          path: |
+            libmaxminddb/build/Release/maxminddb.dll
+            libmaxminddb/build/Release/maxminddb.lib
+            libmaxminddb/include/**
+
+  build-module:
+    name: Build mod_maxminddb (VC17 x64)
+    needs: build-lib
+    runs-on: windows-latest
+    env:
+      BUILD_TYPE: Release
+      CMAKE_GEN: Visual Studio 17 2022
+      ARCH: x64
+      APACHE_DIR: C:\Apache24
+    steps:
+      - name: Checkout module repo
+        uses: actions/checkout@v4
+
+      - name: Download libmaxminddb artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: libmaxminddb-msvc-Release-x64
+          path: libmaxminddb-art
+
+      - name: Lay out libmaxminddb include/lib
+        shell: pwsh
+        run: |
+          New-Item -Force -ItemType Directory -Path deps\libmaxminddb\include | Out-Null
+          New-Item -Force -ItemType Directory -Path deps\libmaxminddb\lib | Out-Null
+          Copy-Item -Recurse libmaxminddb-art\include\* deps\libmaxminddb\include\
+          Copy-Item libmaxminddb-art\maxminddb.lib deps\libmaxminddb\lib\
+          Copy-Item libmaxminddb-art\maxminddb.dll deps\libmaxminddb\
+
+      - name: Download & extract Apache Lounge (VC17 x64)
+        shell: pwsh
+        run: |
+          $url = "${{ github.event.inputs.apache_zip_url }}"
+          if (-not $url) { throw "apache_zip_url is required (VC17 x64 ZIP)." }
+          Invoke-WebRequest -Uri $url -OutFile apache.zip
+          Expand-Archive -LiteralPath apache.zip -DestinationPath $env:RUNNER_TEMP\apache | Out-Null
+          # Find the root folder (varies by version), move to C:\Apache24
+          $root = Get-ChildItem $env:RUNNER_TEMP\apache | Where-Object { $_.PSIsContainer } | Select-Object -First 1
+          if (-not $root) { throw "Could not find extracted Apache root." }
+          Move-Item $root.FullName $env:APACHE_DIR
+
+      - name: Generate CMakeLists.txt (on-the-fly)
+        shell: pwsh
+        run: |
+          @'
+          cmake_minimum_required(VERSION 3.20)
+          project(mod_maxminddb_windows C)
+
+          # Apache + APR headers/libs (Apache Lounge layout)
+          if(NOT DEFINED APACHE_ROOT)
+            set(APACHE_ROOT "C:/Apache24")
+          endif()
+          set(APACHE_INCLUDE "${APACHE_ROOT}/include")
+          set(APACHE_LIBDIR "${APACHE_ROOT}/lib")
+
+          include_directories(${APACHE_INCLUDE})
+          link_directories(${APACHE_LIBDIR})
+
+          # libmaxminddb (from previous job artifacts)
+          set(LMMDB_ROOT "${CMAKE_SOURCE_DIR}/deps/libmaxminddb")
+          include_directories("${LMMDB_ROOT}/include")
+
+          file(GLOB SRC "src/*.c")
+          add_library(mod_maxminddb MODULE ${SRC})
+
+          # Windows Apache modules use .so with no 'lib' prefix
+          set_target_properties(mod_maxminddb PROPERTIES PREFIX "" SUFFIX ".so")
+
+          # Conservative compile defs; Apache headers handle WIN32/EXPORTS as needed
+          target_compile_definitions(mod_maxminddb PRIVATE WIN32 _WINDOWS NDEBUG)
+          target_include_directories(mod_maxminddb PRIVATE ${APACHE_INCLUDE} "${LMMDB_ROOT}/include")
+
+          target_link_libraries(mod_maxminddb
+            "${LMMDB_ROOT}/lib/maxminddb.lib"
+            httpd.lib
+            libapr-1.lib
+            libaprutil-1.lib
+          )
+
+          # Copy runtime DLL next to the built module for convenience
+          add_custom_command(TARGET mod_maxminddb POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+              "${LMMDB_ROOT}/maxminddb.dll"
+              "$<TARGET_FILE_DIR:mod_maxminddb>/maxminddb.dll"
+          )
+          '@ | Set-Content -Path win-cmake/CMakeLists.txt
+
+      - name: Configure module (CMake)
+        run: >
+          cmake -S win-cmake -B build
+          -G "${{ env.CMAKE_GEN }}" -A ${{ env.ARCH }}
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
+          -DAPACHE_ROOT=${{ env.APACHE_DIR }}
+
+      - name: Build module
+        run: cmake --build build --config ${{ env.BUILD_TYPE }} --verbose
+
+      - name: Collect artifacts
+        shell: pwsh
+        run: |
+          New-Item -Force -ItemType Directory -Path artifacts | Out-Null
+          Copy-Item build\${{ env.BUILD_TYPE }}\mod_maxminddb.so artifacts\
+          Copy-Item deps\libmaxminddb\maxminddb.dll artifacts\
+          # Helpful README for deployment
+          @"
+          Files:
+           - mod_maxminddb.so -> copy to C:\Apache24\modules\
+           - maxminddb.dll    -> copy to C:\Apache24\bin\
+
+          Apache config:
+           LoadModule maxminddb_module modules/mod_maxminddb.so
+          "@ | Set-Content artifacts\README-WINDOWS.txt
+
+      - name: Upload module artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mod_maxminddb-msvc-${{ env.BUILD_TYPE }}-${{ env.ARCH }}
+          path: artifacts/**
+
+  release:
+    name: Create GitHub Release (on tag)
+    needs: [build-module]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifacts (module)
+        uses: actions/download-artifact@v4
+        with:
+          name: mod_maxminddb-msvc-Release-x64
+          path: artifacts
+
+      - name: Zip artifacts
+        shell: pwsh
+        run: |
+          $zipPath = "mod_maxminddb-windows-msvc-x64-${{ github.ref_name }}.zip"
+          Compress-Archive -Path artifacts\* -DestinationPath $zipPath
+          echo "ZIP_PATH=$zipPath" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ZIP_PATH }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
