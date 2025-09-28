@@ -166,6 +166,32 @@ jobs:
           Invoke-WebRequest -Uri 'https://www.apachelounge.com/download/VS17/' -WebSession $session -Headers $headers -MaximumRedirection 5 -AllowInsecureRedirect | Out-Null
 
           Invoke-WebRequest -Uri $url -OutFile apache.zip -WebSession $session -Headers $headers -MaximumRedirection 5 -AllowInsecureRedirect
+
+          $hashUrl = if ($url -match '\?') {
+            ($url -split '\?')[0] + '.txt'
+          } else {
+            "$url.txt"
+          }
+          Invoke-WebRequest -Uri $hashUrl -OutFile apache.zip.txt -WebSession $session -Headers $headers -MaximumRedirection 5 -AllowInsecureRedirect
+
+          $hashContent = Get-Content -Path apache.zip.txt -ErrorAction Stop -Raw
+          $zipName = [System.IO.Path]::GetFileName($url)
+          $hashPattern = [Regex]::Escape($zipName) + '[:\s]+(?<hash>[A-Fa-f0-9]{64})'
+          $match = [Regex]::Match($hashContent, $hashPattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+          if (-not $match.Success) {
+            $match = [Regex]::Match($hashContent, '(?<hash>[A-Fa-f0-9]{64})')
+          }
+          $expectedHash = if ($match.Success) { $match.Groups['hash'].Value } else { $null }
+
+          if (-not $expectedHash) {
+            throw "Failed to parse expected SHA256 from $hashUrl"
+          }
+
+          $actualHash = (Get-FileHash -Path apache.zip -Algorithm SHA256).Hash
+          if ($actualHash.ToLowerInvariant() -ne $expectedHash.ToLowerInvariant()) {
+            throw "SHA256 mismatch for apache.zip. Expected $expectedHash, got $actualHash"
+          }
+
           Expand-Archive -LiteralPath apache.zip -DestinationPath $env:RUNNER_TEMP\apache | Out-Null
           $root = Get-ChildItem $env:RUNNER_TEMP\apache | Where-Object { $_.PSIsContainer } | Select-Object -First 1
           if (-not $root) { throw "Could not find extracted Apache root." }
