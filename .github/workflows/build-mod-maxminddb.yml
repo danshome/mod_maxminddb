@@ -170,13 +170,14 @@ jobs:
           set(APACHE_INCLUDE "${APACHE_ROOT}/include")
           set(APACHE_LIBDIR "${APACHE_ROOT}/lib")
 
+          set(PROJECT_ROOT "${CMAKE_SOURCE_DIR}/..");
           include_directories(${APACHE_INCLUDE})
           link_directories(${APACHE_LIBDIR})
 
-          set(LMMDB_ROOT "${CMAKE_SOURCE_DIR}/deps/libmaxminddb")
+          set(LMMDB_ROOT "${PROJECT_ROOT}/deps/libmaxminddb")
           include_directories("${LMMDB_ROOT}/include")
 
-          file(GLOB SRC "src/*.c")
+          file(GLOB SRC "${PROJECT_ROOT}/src/*.c")
           add_library(mod_maxminddb MODULE ${SRC})
           set_target_properties(mod_maxminddb PROPERTIES PREFIX "" SUFFIX ".so")
           target_compile_definitions(mod_maxminddb PRIVATE WIN32 _WINDOWS NDEBUG)
@@ -191,7 +192,7 @@ jobs:
 
           add_custom_command(TARGET mod_maxminddb POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-              "${LMMDB_ROOT}/../maxminddb.dll"
+              "${LMMDB_ROOT}/maxminddb.dll"
               "$<TARGET_FILE_DIR:mod_maxminddb>/maxminddb.dll"
           )
           '@ | Set-Content -Path win-cmake/CMakeLists.txt
