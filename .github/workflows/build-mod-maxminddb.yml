@@ -240,11 +240,20 @@ jobs:
           target_compile_definitions(mod_maxminddb PRIVATE WIN32 _WINDOWS NDEBUG)
           target_include_directories(mod_maxminddb PRIVATE ${APACHE_INCLUDE} "${LMMDB_ROOT}/include")
 
+          # Resolve Apache libraries by name to handle libhttpd/httpd variations
+          find_library(APACHE_HTTPD NAMES libhttpd httpd PATHS ${APACHE_LIBDIR} NO_DEFAULT_PATH)
+          find_library(APACHE_APR NAMES libapr-1 apr-1 PATHS ${APACHE_LIBDIR} NO_DEFAULT_PATH)
+          find_library(APACHE_APRUTIL NAMES libaprutil-1 aprutil-1 PATHS ${APACHE_LIBDIR} NO_DEFAULT_PATH)
+
+          if(NOT APACHE_HTTPD OR NOT APACHE_APR OR NOT APACHE_APRUTIL)
+            message(FATAL_ERROR "Could not find required Apache libraries in ${APACHE_LIBDIR}")
+          endif()
+
           target_link_libraries(mod_maxminddb
             "${LMMDB_ROOT}/lib/maxminddb.lib"
-            httpd.lib
-            libapr-1.lib
-            libaprutil-1.lib
+            ${APACHE_HTTPD}
+            ${APACHE_APR}
+            ${APACHE_APRUTIL}
           )
 
           add_custom_command(TARGET mod_maxminddb POST_BUILD
