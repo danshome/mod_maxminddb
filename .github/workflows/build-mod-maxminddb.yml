@@ -42,10 +42,12 @@ jobs:
           persist-credentials: false
 
       - name: Fetch libmaxminddb source
+        env:
+          LIBMAXMINDDB_TAG: ${{ github.event.inputs.libmaxminddb_tag || '1.12.2' }}
         run: |
           git clone https://github.com/maxmind/libmaxminddb.git
           cd libmaxminddb
-          git checkout "${{ github.event.inputs.libmaxminddb_tag || '1.12.2' }}"
+          git checkout --detach "$Env:LIBMAXMINDDB_TAG"
 
       - name: Configure libmaxminddb (DLL)
         run: >
