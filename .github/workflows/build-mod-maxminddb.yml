@@ -69,6 +69,7 @@ jobs:
             libmaxminddb/build/Release/maxminddb.dll
             libmaxminddb/build/Release/maxminddb.lib
             libmaxminddb/include/**
+            libmaxminddb/build/include/**
 
   build-module:
     name: Build mod_maxminddb (VC17 x64)
@@ -112,6 +113,13 @@ jobs:
             $inc = Get-ChildItem -Recurse -Path "libmaxminddb-art" -Directory -Filter "include" | Select-Object -First 1
           }
 
+          $buildInc = Get-Item "libmaxminddb-art\libmaxminddb\build\include" -ErrorAction SilentlyContinue
+          if (-not $buildInc) {
+            $buildInc = Get-ChildItem -Recurse -Path "libmaxminddb-art" -Directory -Filter "include" |
+              Where-Object { $_.FullName -match "build" } |
+              Select-Object -First 1
+          }
+
           if (-not $dll -or -not $lib -or -not $inc) {
             Write-Host "Artifact tree for debugging:"
             Get-ChildItem -Recurse -Path "libmaxminddb-art" | Select-Object FullName
@@ -125,6 +133,15 @@ jobs:
           # Copy include tree (avoid positional parsing issues)
           $incGlob = Join-Path $inc.FullName '*'
           Copy-Item -Path $incGlob -Destination "deps\libmaxminddb\include" -Recurse -Force
+
+          if ($buildInc) {
+            $buildIncGlob = Join-Path $buildInc.FullName '*'
+            Copy-Item -Path $buildIncGlob -Destination "deps\libmaxminddb\include" -Recurse -Force
+          }
+
+          if (-not (Test-Path "deps\libmaxminddb\include\maxminddb_config.h")) {
+            throw "Expected maxminddb_config.h in deps\\libmaxminddb\\include."
+          }
 
       - name: Download & extract Apache Lounge (VC17 x64)
         shell: pwsh
