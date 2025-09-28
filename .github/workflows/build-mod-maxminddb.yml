@@ -61,15 +61,17 @@ jobs:
       - name: Build libmaxminddb
         run: cmake --build libmaxminddb\build --config ${{ env.BUILD_TYPE }} --verbose
 
+      - name: Install libmaxminddb (staging)
+        run: cmake --install libmaxminddb\build --config ${{ env.BUILD_TYPE }} --prefix libmaxminddb\stage
+
       - name: Upload lib artifacts
         uses: actions/upload-artifact@v4
         with:
           name: libmaxminddb-msvc-${{ env.BUILD_TYPE }}-${{ env.ARCH }}
           path: |
-            libmaxminddb/build/Release/maxminddb.dll
-            libmaxminddb/build/Release/maxminddb.lib
-            libmaxminddb/include/**
-            libmaxminddb/build/include/**
+            libmaxminddb/stage/bin/*.dll
+            libmaxminddb/stage/lib/*.lib
+            libmaxminddb/stage/include/**
 
   build-module:
     name: Build mod_maxminddb (VC17 x64)
@@ -103,50 +105,29 @@ jobs:
           New-Item -Force -ItemType Directory -Path "deps\libmaxminddb\include" | Out-Null
           New-Item -Force -ItemType Directory -Path "deps\libmaxminddb\lib" | Out-Null
 
-          # Find files regardless of artifact subpaths
-          $dll = Get-ChildItem -Recurse -Path "libmaxminddb-art" -Filter "maxminddb.dll" | Select-Object -First 1
-          $lib = Get-ChildItem -Recurse -Path "libmaxminddb-art" -Filter "maxminddb.lib" | Select-Object -First 1
+          $stageRoot = Get-ChildItem -Recurse -Path "libmaxminddb-art" -Directory |
+            Where-Object { $_.Name -ieq 'stage' } |
+            Select-Object -First 1
 
-          # Prefer the canonical include path; fall back to any 'include' dir
-          $inc = Get-Item "libmaxminddb-art\libmaxminddb\include" -ErrorAction SilentlyContinue
-          if (-not $inc) {
-            $inc = Get-ChildItem -Recurse -Path "libmaxminddb-art" -Directory -Filter "include" | Select-Object -First 1
-          }
-
-          $buildInc = Get-Item "libmaxminddb-art\libmaxminddb\build\include" -ErrorAction SilentlyContinue
-          if (-not $buildInc) {
-            $buildInc = Get-ChildItem -Recurse -Path "libmaxminddb-art" -Directory -Filter "include" |
-              Where-Object { $_.FullName -match "build" } |
-              Select-Object -First 1
-          }
-
-          if (-not $dll -or -not $lib -or -not $inc) {
+          if (-not $stageRoot) {
             Write-Host "Artifact tree for debugging:"
             Get-ChildItem -Recurse -Path "libmaxminddb-art" | Select-Object FullName
-            throw ("Missing built artifacts: dll={0} lib={1} include={2}" -f ($dll -ne $null), ($lib -ne $null), ($inc -ne $null))
+            throw "Unable to locate libmaxminddb staged install in artifact."
           }
 
-          # Copy files with explicit destinations; use -LiteralPath for file paths
-          Copy-Item -LiteralPath $dll.FullName -Destination "deps\libmaxminddb" -Force
-          Copy-Item -LiteralPath $lib.FullName -Destination "deps\libmaxminddb\lib" -Force
+          $includeDir = Join-Path $stageRoot.FullName 'include'
+          $libDir = Join-Path $stageRoot.FullName 'lib'
+          $binDir = Join-Path $stageRoot.FullName 'bin'
 
-          # Copy include tree (avoid positional parsing issues)
-          $incGlob = Join-Path $inc.FullName '*'
-          Copy-Item -Path $incGlob -Destination "deps\libmaxminddb\include" -Recurse -Force
-
-          if ($buildInc) {
-            $buildIncGlob = Join-Path $buildInc.FullName '*'
-            Copy-Item -Path $buildIncGlob -Destination "deps\libmaxminddb\include" -Recurse -Force
+          if (-not (Test-Path $includeDir) -or -not (Test-Path $libDir)) {
+            throw "Staged libmaxminddb is missing include/ or lib/ directories."
           }
 
-          $configHeader = Get-ChildItem -Recurse -Path "libmaxminddb-art" -Filter "maxminddb_config.h" | Select-Object -First 1
-          if ($configHeader) {
-            Copy-Item -LiteralPath $configHeader.FullName -Destination "deps\libmaxminddb\include" -Force
+          if (Test-Path $binDir) {
+            Copy-Item -Path (Join-Path $binDir '*') -Destination "deps\libmaxminddb" -Force
           }
-
-          if (-not (Test-Path "deps\libmaxminddb\include\maxminddb_config.h")) {
-            throw "Expected maxminddb_config.h in deps\\libmaxminddb\\include."
-          }
+          Copy-Item -Path (Join-Path $libDir '*') -Destination "deps\libmaxminddb\lib" -Force
+          Copy-Item -Path (Join-Path $includeDir '*') -Destination "deps\libmaxminddb\include" -Recurse -Force
 
       - name: Download & extract Apache Lounge (VC17 x64)
         shell: pwsh
