@@ -106,8 +106,8 @@ jobs:
           New-Item -Force -ItemType Directory -Path "deps\libmaxminddb\lib" | Out-Null
 
           $candidateRoots = @(
-            Join-Path 'libmaxminddb-art' 'libmaxminddb/stage'),
-            Join-Path 'libmaxminddb-art' 'stage'
+            (Join-Path 'libmaxminddb-art' 'libmaxminddb/stage'),
+            (Join-Path 'libmaxminddb-art' 'stage')
           )
           $stageRoot = $null
           foreach ($path in $candidateRoots) {
