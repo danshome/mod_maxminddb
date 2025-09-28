@@ -104,7 +104,10 @@ jobs:
           New-Item -Force -ItemType Directory -Path "deps\libmaxminddb\lib" | Out-Null
 
           $stageRoot = Get-ChildItem -Recurse -Path "libmaxminddb-art" -Directory |
-            Where-Object { $_.Name -ieq 'stage' } |
+            Where-Object {
+              Test-Path (Join-Path $_.FullName 'include') -and
+              Test-Path (Join-Path $_.FullName 'lib')
+            } |
             Select-Object -First 1
 
           if (-not $stageRoot) {
