@@ -69,9 +69,7 @@ jobs:
         with:
           name: libmaxminddb-msvc-${{ env.BUILD_TYPE }}-${{ env.ARCH }}
           path: |
-            libmaxminddb/stage/bin/*.dll
-            libmaxminddb/stage/lib/*.lib
-            libmaxminddb/stage/include/**
+            libmaxminddb/stage/**
 
   build-module:
     name: Build mod_maxminddb (VC17 x64)
