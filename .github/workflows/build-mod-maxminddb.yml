@@ -139,6 +139,11 @@ jobs:
             Copy-Item -Path $buildIncGlob -Destination "deps\libmaxminddb\include" -Recurse -Force
           }
 
+          $configHeader = Get-ChildItem -Recurse -Path "libmaxminddb-art" -Filter "maxminddb_config.h" | Select-Object -First 1
+          if ($configHeader) {
+            Copy-Item -LiteralPath $configHeader.FullName -Destination "deps\libmaxminddb\include" -Force
+          }
+
           if (-not (Test-Path "deps\libmaxminddb\include\maxminddb_config.h")) {
             throw "Expected maxminddb_config.h in deps\\libmaxminddb\\include."
           }
