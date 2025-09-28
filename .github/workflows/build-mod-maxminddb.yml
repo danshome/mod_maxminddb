@@ -157,6 +157,9 @@ jobs:
       - name: Generate CMakeLists.txt (on-the-fly)
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Force -Path "win-cmake" | Out-Null
+
           @'
           cmake_minimum_required(VERSION 3.20)
           project(mod_maxminddb_windows C)
