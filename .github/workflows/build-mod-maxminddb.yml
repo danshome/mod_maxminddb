@@ -170,7 +170,7 @@ jobs:
           set(APACHE_INCLUDE "${APACHE_ROOT}/include")
           set(APACHE_LIBDIR "${APACHE_ROOT}/lib")
 
-          set(PROJECT_ROOT "${CMAKE_SOURCE_DIR}/..");
+          set(PROJECT_ROOT "${CMAKE_SOURCE_DIR}/..")
           include_directories(${APACHE_INCLUDE})
           link_directories(${APACHE_LIBDIR})
 
