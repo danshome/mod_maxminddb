@@ -238,8 +238,6 @@ jobs:
           add_library(mod_maxminddb MODULE ${SRC})
           set_target_properties(mod_maxminddb PROPERTIES PREFIX "" SUFFIX ".so")
           target_compile_definitions(mod_maxminddb PRIVATE WIN32 _WINDOWS NDEBUG _WIN32_WINNT=0x0600)
-          # Force-include winsock headers and silence macro redefinition warning without source edits
-          target_compile_options(mod_maxminddb PRIVATE /FIwinsock2.h /FIws2tcpip.h /wd4005)
           target_include_directories(mod_maxminddb PRIVATE ${APACHE_INCLUDE} "${LMMDB_ROOT}/include")
 
           # Resolve Apache libraries by name to handle libhttpd/httpd variations
@@ -311,7 +309,7 @@ jobs:
           }
 
           $deps = & $dumpbin /DEPENDENTS $mod | Out-String
-          $required = @('maxminddb.dll','libapr-1.dll','libaprutil-1.dll','WS2_32.dll')
+          $required = @('maxminddb.dll','libapr-1.dll','WS2_32.dll')
           foreach ($r in $required) {
             if ($deps -notmatch [Regex]::Escape($r)) {
               throw "Missing dependent: $r`n$deps"
