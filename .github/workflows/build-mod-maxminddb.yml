@@ -375,5 +375,5 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "$env:TAG_SAFE" --notes "Automated build for $env:TAG_SAFE" -t "$env:TAG_SAFE" 2>$null || $true
-          gh release upload "$env:TAG_SAFE" "$env:ZIP_PATH" --clobber
+          gh release create -R "$env:GITHUB_REPOSITORY" "$env:TAG_SAFE" --notes "Automated build for $env:TAG_SAFE" -t "$env:TAG_SAFE" 2>$null || $true
+          gh release upload -R "$env:GITHUB_REPOSITORY" "$env:TAG_SAFE" "$env:ZIP_PATH" --clobber
