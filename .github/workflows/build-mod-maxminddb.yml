@@ -119,12 +119,11 @@ jobs:
           target_sources(maxminddb PRIVATE ${CMAKE_BINARY_DIR}/version.rc)
           '@ | Set-Content win-lib-cmake\CMakeLists.txt -Encoding ASCII
 
-          # Render version.rc with actual values
-          (Get-Content win-lib-cmake\version.rc.in) -replace '@FILE_VERSION_NUM@', $fileVerNum \
-            -replace '@PRODUCT_VERSION_NUM@', $fileVerNum \
-            -replace '@FILE_VERSION_STR@', [Regex]::Escape($libTag) \
-            -replace '@PRODUCT_VERSION_STR@', [Regex]::Escape($tag) \
-            | Set-Content win-lib-cmake\version.rc -Encoding ASCII
+          # Export version values for CMake configure step
+          "FILE_VERSION_NUM=$fileVerNum" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "PRODUCT_VERSION_NUM=$fileVerNum" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "FILE_VERSION_STR=$libTag" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "PRODUCT_VERSION_STR=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Configure libmaxminddb (DLL)
         run: >
@@ -136,6 +135,10 @@ jobs:
           -DMMDB_BUILD_TESTS=OFF
           -DMAXMINDDB_BUILD_BINARIES=OFF
           -DMAXMINDDB_INSTALL=ON
+          -DFILE_VERSION_NUM="$Env:FILE_VERSION_NUM"
+          -DPRODUCT_VERSION_NUM="$Env:PRODUCT_VERSION_NUM"
+          -DFILE_VERSION_STR="$Env:FILE_VERSION_STR"
+          -DPRODUCT_VERSION_STR="$Env:PRODUCT_VERSION_STR"
 
       - name: Build libmaxminddb
         run: cmake --build libmaxminddb\build --config ${{ env.BUILD_TYPE }} --verbose
