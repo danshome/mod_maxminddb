@@ -317,7 +317,8 @@ jobs:
           file(GLOB SRC "${PROJECT_ROOT}/src/*.c")
           add_library(mod_maxminddb MODULE ${SRC})
           set_target_properties(mod_maxminddb PROPERTIES PREFIX "" SUFFIX ".so")
-          target_compile_definitions(mod_maxminddb PRIVATE WIN32 _WINDOWS NDEBUG _WIN32_WINNT=0x0600)
+          # Enable verbose module logging and target Windows 10/Server 2016+ APIs
+          target_compile_definitions(mod_maxminddb PRIVATE WIN32 _WINDOWS NDEBUG _WIN32_WINNT=0x0600 MAXMINDDB_DEBUG)
           # Force-include headers so source stays unmodified
           target_compile_options(mod_maxminddb PRIVATE /FIwinsock2.h /FIws2tcpip.h)
           target_include_directories(mod_maxminddb PRIVATE ${APACHE_INCLUDE} "${LMMDB_ROOT}/include")
