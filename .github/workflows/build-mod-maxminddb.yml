@@ -238,6 +238,8 @@ jobs:
           add_library(mod_maxminddb MODULE ${SRC})
           set_target_properties(mod_maxminddb PROPERTIES PREFIX "" SUFFIX ".so")
           target_compile_definitions(mod_maxminddb PRIVATE WIN32 _WINDOWS NDEBUG _WIN32_WINNT=0x0600)
+          # Force-include winsock headers and silence macro redefinition warning without source edits
+          target_compile_options(mod_maxminddb PRIVATE /FIwinsock2.h /FIws2tcpip.h /wd4005)
           target_include_directories(mod_maxminddb PRIVATE ${APACHE_INCLUDE} "${LMMDB_ROOT}/include")
 
           # Resolve Apache libraries by name to handle libhttpd/httpd variations
@@ -284,7 +286,7 @@ jobs:
           # Locate dumpbin
           $dumpbin = (Get-Command dumpbin.exe -ErrorAction SilentlyContinue).Source
           if (-not $dumpbin) {
-            $vswhere = "$Env:ProgramFiles(x86)\Microsoft Visual Studio\Installer\vswhere.exe"
+            $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
             if (Test-Path $vswhere) {
               $vsinst = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
               if ($vsinst) {
@@ -296,6 +298,10 @@ jobs:
                 }
               }
             }
+          }
+          if (-not $dumpbin) {
+            $alt = Get-ChildItem 'C:\Program Files\Microsoft Visual Studio\2022' -Recurse -Filter dumpbin.exe -File -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($alt) { $dumpbin = $alt.FullName }
           }
           if (-not $dumpbin) { throw "dumpbin.exe not found" }
 
