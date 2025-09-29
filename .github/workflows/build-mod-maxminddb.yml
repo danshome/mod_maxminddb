@@ -49,9 +49,86 @@ jobs:
           cd libmaxminddb
           git checkout --detach "$Env:LIBMAXMINDDB_TAG"
 
+      - name: Generate lib wrapper CMake + version resource
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Force -Path "win-lib-cmake\libmaxminddb" | Out-Null
+          Copy-Item -Recurse -Force libmaxminddb\* win-lib-cmake\libmaxminddb\
+
+          $libTag = "$Env:LIBMAXMINDDB_TAG"
+          $tag = $env:GITHUB_REF_NAME
+          if (-not $tag) { $tag = $libTag }
+
+          $nums = @()
+          foreach ($part in ($libTag -split '[^0-9]+')) { if ($part) { $nums += [int]$part } }
+          while ($nums.Count -lt 4) { $nums += 0 }
+          if ($nums.Count -gt 4) { $nums = $nums[0..3] }
+          $fileVerNum = ($nums -join ',')
+
+          @'
+          #include <winver.h>
+          VS_VERSION_INFO VERSIONINFO
+           FILEVERSION @FILE_VERSION_NUM@
+           PRODUCTVERSION @PRODUCT_VERSION_NUM@
+           FILEFLAGSMASK 0x3fL
+          #ifdef _DEBUG
+           FILEFLAGS 0x1L
+          #else
+           FILEFLAGS 0x0L
+          #endif
+           FILEOS 0x40004L
+           FILETYPE 0x2L
+           FILESUBTYPE 0x0L
+          BEGIN
+            BLOCK "StringFileInfo"
+            BEGIN
+              BLOCK "040904B0"
+              BEGIN
+                VALUE "CompanyName", "MaxMind, Inc.; Built by danshome/mod_maxminddb\0"
+                VALUE "FileDescription", "MaxMind DB C library (Windows DLL)\0"
+                VALUE "FileVersion", "@FILE_VERSION_STR@\0"
+                VALUE "InternalName", "maxminddb\0"
+                VALUE "OriginalFilename", "maxminddb.dll\0"
+                VALUE "ProductName", "libmaxminddb\0"
+                VALUE "ProductVersion", "@PRODUCT_VERSION_STR@\0"
+                VALUE "LegalCopyright", "Copyright (c) MaxMind, Inc.\0"
+              END
+            END
+            BLOCK "VarFileInfo"
+            BEGIN
+              VALUE "Translation", 0x0409, 1200
+            END
+          END
+          '@ | Set-Content win-lib-cmake\version.rc.in -Encoding ASCII
+
+          @'
+          cmake_minimum_required(VERSION 3.20)
+          project(libmaxminddb_wrapper C)
+
+          # Forward options to subproject
+          set(BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
+          set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+          set(MMDB_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+          set(MAXMINDDB_BUILD_BINARIES OFF CACHE BOOL "" FORCE)
+          set(MAXMINDDB_INSTALL ON CACHE BOOL "" FORCE)
+
+          add_subdirectory("${CMAKE_SOURCE_DIR}/libmaxminddb" libmaxminddb)
+
+          configure_file(${CMAKE_SOURCE_DIR}/version.rc.in ${CMAKE_BINARY_DIR}/version.rc @ONLY)
+          target_sources(maxminddb PRIVATE ${CMAKE_BINARY_DIR}/version.rc)
+          '@ | Set-Content win-lib-cmake\CMakeLists.txt -Encoding ASCII
+
+          # Render version.rc with actual values
+          (Get-Content win-lib-cmake\version.rc.in) -replace '@FILE_VERSION_NUM@', $fileVerNum \
+            -replace '@PRODUCT_VERSION_NUM@', $fileVerNum \
+            -replace '@FILE_VERSION_STR@', [Regex]::Escape($libTag) \
+            -replace '@PRODUCT_VERSION_STR@', [Regex]::Escape($tag) \
+            | Set-Content win-lib-cmake\version.rc -Encoding ASCII
+
       - name: Configure libmaxminddb (DLL)
         run: >
-          cmake -S libmaxminddb -B libmaxminddb\build
+          cmake -S win-lib-cmake -B libmaxminddb\build
           -G "${{ env.CMAKE_GEN }}" -A ${{ env.ARCH }}
           -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
           -DBUILD_SHARED_LIBS=ON
